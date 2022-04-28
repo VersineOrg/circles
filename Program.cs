@@ -1,98 +1,301 @@
 using System.Net;
-using System.Text;
-using circles;
+using door;
+using MongoDB.Bson;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
-namespace circles
+namespace circles;
+
+class HttpServer
 {
-    
-    // Default Schema for a Http Response
-    public class Response
-    {
-        public String success { get; set; }
-        public String message { get; set; }
-    }
-    
-   }
-    class HttpServer
-    {
-        
-        public static HttpListener? Listener;
+    public static HttpListener? Listener;
 
-        public static async Task HandleIncomingConnections(IConfigurationRoot config)
+    public static async Task HandleIncomingConnections(EasyMango.EasyMango userDatabase, EasyMango.EasyMango circleDatabase)
+    {
+        while (true)
         {
+            HttpListenerContext ctx = await Listener?.GetContextAsync()!;
 
-            // Connect to the MongoDB Database
-            /* 
-            string connectionString = config.GetValue<String>("MongoDB");
-            MongoClientSettings settings = MongoClientSettings.FromConnectionString(connectionString);
-            MongoClient client = new MongoClient(settings);
-            IMongoDatabase database = client.GetDatabase("UsersDB");
-            BsonClassMap.RegisterClassMap<User>();
-            IMongoCollection<User> collection = database.GetCollection<User>("users");
-            Console.WriteLine("Database connected");
-            */
-            
-            
-            
-            while (true)
+            HttpListenerRequest req = ctx.Request;
+            HttpListenerResponse resp = ctx.Response;
+
+            Console.WriteLine(req.HttpMethod);
+            Console.WriteLine(req.Url?.ToString());
+            Console.WriteLine(req.UserHostName);
+            Console.WriteLine(req.UserAgent);
+
+            if (req.HttpMethod == "GET" && req.Url?.AbsolutePath == "/userCircles")
             {
-                // Will wait here until we hear from a connection
-                HttpListenerContext ctx = await Listener?.GetContextAsync()!;
+                StreamReader reader = new StreamReader(req.InputStream);
+                string bodyString = await reader.ReadToEndAsync();
+                dynamic body = JsonConvert.DeserializeObject(bodyString)!;
 
-                // Peel out the requests and response objects
-                HttpListenerRequest req = ctx.Request;
-                HttpListenerResponse resp = ctx.Response;
+                string token;
+                try
+                {
+                    token = ((string) body.token).Trim();
+                }
+                catch
+                {
+                    token = "";
+                }
 
-                // Print out some info about the request
-                Console.WriteLine(req.HttpMethod);
-                Console.WriteLine(req.Url?.ToString());
-                Console.WriteLine(req.UserHostName);
-                Console.WriteLine(req.UserAgent);
-
-                
-                    Response response = new Response()
+                if (!String.IsNullOrEmpty(token))
+                {
+                    string id = WebToken.GetIdFromToken(token);
+                    if (id == "")
                     {
-                        success = "true",
-                        message = "200"
-                    };
-                    
-                    string jsonString = JsonConvert.SerializeObject(response);
-                    byte[] data = Encoding.UTF8.GetBytes(jsonString);
-                    
-                    resp.ContentType = "application/json";
-                    resp.ContentEncoding = Encoding.UTF8;
-                    resp.ContentLength64 = data.LongLength;
-                    
-                    // Write out to the response stream (asynchronously), then close it
-                    await resp.OutputStream.WriteAsync(data, 0, data.Length);
-                    resp.Close();    
+                        Response.Fail(resp, "invalid token");
+                    }
+                    else
+                    {
+                        BsonObjectId userId = new BsonObjectId(new ObjectId(id));
+                        
+                        if (userDatabase.GetSingleDatabaseEntry("_id", userId,
+                                out BsonDocument userBsonDocument))
+                        {
+                            if (circleDatabase.GetMultipleDatabaseEntries("owner", userId,
+                                    EasyMango.EasyMango.SortingOrder.Descending, "name", out List<BsonDocument> bsonCircles))
+                            {
+                                List<Circle> circles = new List<Circle>();
+                                foreach (BsonDocument bsonCircle in bsonCircles)
+                                {
+                                    circles.Add(new Circle(bsonCircle));
+                                }
+                                JObject returnMessage = (JObject)JToken.FromObject(circles);
+                                
+                                Response.Success(resp,"circles found",returnMessage.ToString());
+                            }
+                            else
+                            {
+                                Response.Success(resp,"no circles found","");
+                            }
+                        }
+                        else
+                        {
+                            Response.Fail(resp,"user deleted");
+                        }
+                    }
+                }
+                else
+                {
+                    Response.Fail(resp,"invalid body");
+                }
             }
-        }
+            else if (req.HttpMethod == "POST" && req.Url?.AbsolutePath == "/addToCirlce")
+            {
+                StreamReader reader = new StreamReader(req.InputStream);
+                string bodyString = await reader.ReadToEndAsync();
+                dynamic body = JsonConvert.DeserializeObject(bodyString)!;
 
+                string token;
+                string friend_id;
+                string circleName;
+                try
+                {
+                    token = ((string) body.token).Trim();
+                    friend_id = ((string) body.friendId).Trim();
+                    circleName = ((string) body.circleName).Trim();
+                }
+                catch
+                {
+                    token = "";
+                    friend_id = "";
+                    circleName = "";
+                }
 
-        public static void Main(string[] args)
-        {
-            // Build the configuration for the env variables
-            IConfigurationRoot config =
-                new ConfigurationBuilder()
-                    .SetBasePath(Directory.GetCurrentDirectory())
-                    .AddJsonFile("appsettings.json", true)
-                    .AddEnvironmentVariables()
-                    .Build();
-            
-            // Create a Http server and start listening for incoming connections
-            string url = "http://*:" + config.GetValue<String>("Port") + "/";
-            Listener = new HttpListener();
-            Listener.Prefixes.Add(url);
-            Listener.Start();
-            Console.WriteLine("Listening for connections on {0}", url);
+                if (!(String.IsNullOrEmpty(token) || String.IsNullOrEmpty(friend_id)))
+                {
+                    string id = WebToken.GetIdFromToken(token);
+                    if (id=="")
+                    {
+                        Response.Fail(resp, "invalid token");
+                    }
+                    else
+                    {
+                        BsonObjectId userId = new BsonObjectId(new ObjectId(id));
+                        BsonObjectId friendId = new BsonObjectId(new ObjectId(friend_id));
 
-            // Handle requests
-            Task listenTask = HandleIncomingConnections(config);
-            listenTask.GetAwaiter().GetResult();
+                        if (userDatabase.GetSingleDatabaseEntry("_id", userId,
+                                out BsonDocument userBsonDocument))
+                        {
+                            User user = new User(userBsonDocument);
+                            if (user.friends.Contains(friendId))
+                            {
+                                bool circleExist = false;
+                                if (circleDatabase.GetMultipleDatabaseEntries("owner", userId,
+                                        EasyMango.EasyMango.SortingOrder.Descending, "name",
+                                        out List<BsonDocument> bsonCircles))
+                                {
+                                    List<Circle> circles = new List<Circle>();
+                                    foreach (BsonDocument bsonCircle in bsonCircles)
+                                    {
+                                        Circle circle = new Circle(bsonCircle);
+                                        if (circle.name == circleName)
+                                        {
+                                            circleExist = true;
+                                            circle.users.Add(friendId);
+                                            
+                                            if (circleDatabase.ReplaceSingleDatabaseEntry("_id",
+                                                    bsonCircle.GetElement("_id").Value.AsObjectId,
+                                                    circle.ToBson()))
+                                            {
+                                                Response.Success(resp,"added user to circle circle","");
+                                            }
+                                            else
+                                            {
+                                                Response.Fail(resp,"an error occured, please try again later");
+                                            }
+                                        }
+                                    }
+                                }
+                                if (!circleExist)
+                                {
+                                    Circle circle = new Circle(userId,circleName);
+                                    circle.users.Add(friendId);
+                                    if (circleDatabase.AddSingleDatabaseEntry(circle.ToBson()))
+                                    {
+                                        Response.Success(resp,"created circle","");
+                                    }
+                                    else
+                                    {
+                                        Response.Fail(resp,"an error occured, please try again later");
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                Response.Fail(resp,"user provided isn't a friend");
+                            }
+                        }
+                        else
+                        {
+                            Response.Fail(resp,"user deleted");
+                        }
+                    }
+                }
+            }
+            else if (req.HttpMethod == "POST" && req.Url?.AbsolutePath == "/removeFromCircle")
+            {
+                StreamReader reader = new StreamReader(req.InputStream);
+                string bodyString = await reader.ReadToEndAsync();
+                dynamic body = JsonConvert.DeserializeObject(bodyString)!;
 
-            // Close the listener
-            Listener.Close();
+                string token;
+                string friend_id;
+                string circleName;
+                try
+                {
+                    token = ((string) body.token).Trim();
+                    friend_id = ((string) body.friendId).Trim();
+                    circleName = ((string) body.circleName).Trim();
+                }
+                catch
+                {
+                    token = "";
+                    friend_id = "";
+                    circleName = "";
+                }
+
+                if (!(String.IsNullOrEmpty(token) || String.IsNullOrEmpty(friend_id)))
+                {
+                    string id = WebToken.GetIdFromToken(token);
+                    
+                    BsonObjectId userId = new BsonObjectId(new ObjectId(id));
+                    BsonObjectId friendId = new BsonObjectId(new ObjectId(friend_id));
+
+                    if (circleDatabase.GetMultipleDatabaseEntries("owner", userId, out List<BsonDocument> bsonCircles))
+                    {
+                        bool userIsInCircle = false;
+                        foreach (BsonDocument bsonCircle in bsonCircles)
+                        {
+                            Circle circle = new Circle(bsonCircle);
+                            
+                            if (circle.users.Contains(friendId) && circle.name == circleName)
+                            {
+                                userIsInCircle = true;
+                                circle.users.Remove(friendId);
+                                if (circle.users.Count > 0)
+                                {
+                                    if (circleDatabase.ReplaceSingleDatabaseEntry("_id",
+                                            bsonCircle.GetElement("_id").Value.AsObjectId,
+                                            circle.ToBson()))
+                                    {
+                                        Response.Success(resp,"circle deleted","");
+                                    }
+                                    else
+                                    {
+                                        Response.Fail(resp,"an error occured, please try again later");
+                                    }
+                                }
+                                else
+                                {
+                                    if (circleDatabase.RemoveSingleDatabaseEntry("_id",
+                                            bsonCircle.GetElement("_id").Value.AsObjectId))
+                                    {
+                                        Response.Success(resp,"circle deleted","");
+                                    }
+                                    else
+                                    {
+                                        Response.Fail(resp,"an error occured, please try again later");
+                                    }
+                                }
+                            }
+                        }
+
+                        if (!userIsInCircle)
+                        {
+                            
+                        }
+                    }
+                    else
+                    {
+                        Response.Fail(resp,"circle doesn't exist");
+                    }
+                }
+            }
+            else
+            {
+                Response.Fail(resp, "404");
+            }
+            // close response
+            resp.Close();
         }
     }
+
+    public static void Main(string[] args)
+    {
+        IConfigurationRoot config =
+            new ConfigurationBuilder()
+                .SetBasePath(Directory.GetCurrentDirectory())
+                .AddJsonFile("appsettings.json", true)
+                .AddEnvironmentVariables()
+                .Build();
+            
+        string connectionString = config.GetValue<String>("connectionString");
+        string userDatabaseNAme = config.GetValue<String>("userDatabaseNAme");
+        string userCollectionName = config.GetValue<String>("userCollectionName");
+        string circleDatabaseNAme = config.GetValue<String>("circleDatabaseNAme");
+        string circleCollectionName = config.GetValue<String>("circleCollectionName");
+
+        
+        // Create EasyMango databases
+        EasyMango.EasyMango userDatabase = new EasyMango.EasyMango(connectionString,userDatabaseNAme,userCollectionName);
+        EasyMango.EasyMango circleDatabase = new EasyMango.EasyMango(connectionString,circleDatabaseNAme,circleCollectionName);
+
+        
+        // Create a Http server and start listening for incoming connections
+        string url = "http://*:" + config.GetValue<String>("Port") + "/";
+        Listener = new HttpListener();
+        Listener.Prefixes.Add(url);
+        Listener.Start();
+        Console.WriteLine("Listening for connections on {0}", url);
+
+        // Handle requests
+        Task listenTask = HandleIncomingConnections(userDatabase,circleDatabase);
+        listenTask.GetAwaiter().GetResult();
+        
+        // Close the listener
+        Listener.Close();
+    }
+}
