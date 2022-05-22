@@ -1,20 +1,22 @@
-using System.Net;
-using door;
-using MongoDB.Bson;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Newtonsoft.Json;
+using VersineResponse;
+using MongoDB.Bson;
+using VersineUser;
+using System.Net;
 
 namespace circles;
 
 class HttpServer
 {
-    public static HttpListener? Listener;
+    public static HttpListener? listener;
 
-    public static async Task HandleIncomingConnections(EasyMango.EasyMango userDatabase, EasyMango.EasyMango circleDatabase)
+    public static async Task HandleIncomingConnections(EasyMango.EasyMango userDatabase,
+        EasyMango.EasyMango circleDatabase, WebToken.WebToken jwt)
     {
         while (true)
         {
-            HttpListenerContext ctx = await Listener?.GetContextAsync()!;
+            HttpListenerContext ctx = await listener?.GetContextAsync()!;
 
             HttpListenerRequest req = ctx.Request;
             HttpListenerResponse resp = ctx.Response;
@@ -42,7 +44,7 @@ class HttpServer
 
                 if (!String.IsNullOrEmpty(token))
                 {
-                    string id = WebToken.GetIdFromToken(token);
+                    string id = jwt.GetIdFromToken(token);
                     if (id == "")
                     {
                         Response.Fail(resp, "invalid token");
@@ -106,7 +108,7 @@ class HttpServer
 
                 if (!(String.IsNullOrEmpty(token) || String.IsNullOrEmpty(friend_id)))
                 {
-                    string id = WebToken.GetIdFromToken(token);
+                    string id = jwt.GetIdFromToken(token);
                     if (id=="")
                     {
                         Response.Fail(resp, "invalid token");
@@ -199,7 +201,7 @@ class HttpServer
 
                 if (!(String.IsNullOrEmpty(token) || String.IsNullOrEmpty(friend_id)))
                 {
-                    string id = WebToken.GetIdFromToken(token);
+                    string id = jwt.GetIdFromToken(token);
                     
                     BsonObjectId userId = new BsonObjectId(new ObjectId(id));
                     BsonObjectId friendId = new BsonObjectId(new ObjectId(friend_id));
@@ -271,13 +273,18 @@ class HttpServer
                 .AddJsonFile("appsettings.json", true)
                 .AddEnvironmentVariables()
                 .Build();
-            
+        
+        // Get values from config file
         string connectionString = config.GetValue<String>("connectionString");
         string userDatabaseNAme = config.GetValue<String>("userDatabaseNAme");
         string userCollectionName = config.GetValue<String>("userCollectionName");
         string circleDatabaseNAme = config.GetValue<String>("circleDatabaseNAme");
         string circleCollectionName = config.GetValue<String>("circleCollectionName");
+        string secretKey = config.GetValue<String>("secretKey");
+        uint expireDelay = config.GetValue<uint>("expireDelay");
 
+        // Json web token
+        WebToken.WebToken jwt = new WebToken.WebToken(secretKey,expireDelay);
         
         // Create EasyMango databases
         EasyMango.EasyMango userDatabase = new EasyMango.EasyMango(connectionString,userDatabaseNAme,userCollectionName);
@@ -286,16 +293,16 @@ class HttpServer
         
         // Create a Http server and start listening for incoming connections
         string url = "http://*:" + config.GetValue<String>("Port") + "/";
-        Listener = new HttpListener();
-        Listener.Prefixes.Add(url);
-        Listener.Start();
+        listener = new HttpListener();
+        listener.Prefixes.Add(url);
+        listener.Start();
         Console.WriteLine("Listening for connections on {0}", url);
 
         // Handle requests
-        Task listenTask = HandleIncomingConnections(userDatabase,circleDatabase);
+        Task listenTask = HandleIncomingConnections(userDatabase,circleDatabase, jwt);
         listenTask.GetAwaiter().GetResult();
         
         // Close the listener
-        Listener.Close();
+        listener.Close();
     }
 }

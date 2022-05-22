@@ -10,6 +10,9 @@
     <PackageReference Include="MongoDB.Bson" Version="2.15.0" />
     <PackageReference Include="Mongodb.Driver" Version="2.15.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
+    <PackageReference Include="VersineResponse" Version="1.0.0" />
+    <PackageReference Include="VersineUser" Version="1.0.0" />
+    <PackageReference Include="WebToken" Version="1.0.0" />
   </ItemGroup>
 
 </Project>
