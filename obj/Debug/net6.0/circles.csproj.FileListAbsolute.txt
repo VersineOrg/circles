@@ -1,6 +1,0 @@
-/home/rayan/Documents/circles/obj/Debug/net6.0/circles.csproj.AssemblyReference.cache
-/home/rayan/Documents/circles/obj/Debug/net6.0/circles.GeneratedMSBuildEditorConfig.editorconfig
-/home/rayan/Documents/circles/obj/Debug/net6.0/circles.AssemblyInfoInputs.cache
-/home/rayan/Documents/circles/obj/Debug/net6.0/circles.AssemblyInfo.cs
-/home/rayan/Documents/circles/obj/Debug/net6.0/circles.csproj.CoreCompileInputs.cache
-/home/rayan/Documents/circles/obj/Debug/net6.0/circles.MvcApplicationPartsAssemblyInfo.cache
