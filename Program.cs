@@ -84,6 +84,10 @@ class HttpServer
                     Response.Fail(resp,"invalid body");
                 }
             }
+            else if (req.HttpMethod == "GET" && req.Url?.AbsolutePath == "/health")
+            {
+                Response.Success(resp,"service up","");
+            }
             else if (req.HttpMethod == "POST" && req.Url?.AbsolutePath == "/addToCirlce")
             {
                 StreamReader reader = new StreamReader(req.InputStream);
