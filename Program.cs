@@ -88,7 +88,7 @@ class HttpServer
             {
                 Response.Success(resp,"service up","");
             }
-            else if (req.HttpMethod == "POST" && req.Url?.AbsolutePath == "/addToCirlce")
+            else if (req.HttpMethod == "POST" && req.Url?.AbsolutePath == "/addToCircle")
             {
                 StreamReader reader = new StreamReader(req.InputStream);
                 string bodyString = await reader.ReadToEndAsync();
