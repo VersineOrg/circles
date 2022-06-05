@@ -25,7 +25,7 @@ class HttpServer
             Console.WriteLine(req.Url?.ToString());
             Console.WriteLine(req.UserHostName);
             Console.WriteLine(req.UserAgent);
-
+            
             if (req.HttpMethod == "GET" && req.Url?.AbsolutePath == "/userCircles")
             {
                 StreamReader reader = new StreamReader(req.InputStream);
@@ -87,6 +87,91 @@ class HttpServer
             else if (req.HttpMethod == "GET" && req.Url?.AbsolutePath == "/health")
             {
                 Response.Success(resp,"service up","");
+            }
+            
+            else if (req.HttpMethod == "POST" && req.Url?.AbsolutePath == "/CreateCircle")
+            {
+                StreamReader reader = new StreamReader(req.InputStream);
+                string bodyString = await reader.ReadToEndAsync();
+                dynamic body = JsonConvert.DeserializeObject(bodyString)!;
+
+                string token;
+                string friend_id;
+                string circleName;
+                try
+                {
+                    token = ((string) body.token).Trim();
+                    friend_id = ((string) body.friendId).Trim();
+                    circleName = ((string) body.circleName).Trim();
+                }
+                catch
+                {
+                    token = "";
+                    friend_id = "";
+                    circleName = "";
+                }
+
+                if (!(String.IsNullOrEmpty(token) || String.IsNullOrEmpty(friend_id)))
+                {
+                    string id = jwt.GetIdFromToken(token);
+                    if (id=="")
+                    {
+                        Response.Fail(resp, "invalid token");
+                    }
+                    else
+                    {
+                        BsonObjectId userId = new BsonObjectId(new ObjectId(id));
+                        BsonObjectId friendId = new BsonObjectId(new ObjectId(friend_id));
+
+                        if (userDatabase.GetSingleDatabaseEntry("_id", userId,
+                                out BsonDocument userBsonDocument))
+                        {
+                            User user = new User(userBsonDocument);
+                            if (user.friends.Contains(friendId))
+                            {
+                                bool circleExist = false;
+                                if (circleDatabase.GetMultipleDatabaseEntries("owner", userId,
+                                        EasyMango.EasyMango.SortingOrder.Descending, "name",
+                                        out List<BsonDocument> bsonCircles))
+                                {
+                                    foreach (BsonDocument bsonCircle in bsonCircles)
+                                    {
+                                        Circle circle = new Circle(bsonCircle);
+                                        if (circle.name == circleName)
+                                        {
+                                            circleExist = true;
+                                        }
+                                    }
+                                }
+                                if (circleExist)
+                                {
+                                    Response.Fail(resp,"circle already exists");
+                                }
+                                else
+                                {
+                                    Circle circle = new Circle(userId,circleName);
+                                    circle.users.Add(friendId);
+                                    if (circleDatabase.AddSingleDatabaseEntry(circle.ToBson()))
+                                    {
+                                        Response.Success(resp,"created circle","");
+                                    }
+                                    else
+                                    {
+                                        Response.Fail(resp,"an error occured, please try again later");
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                Response.Fail(resp,"user provided isn't a friend");
+                            }
+                        }
+                        else
+                        {
+                            Response.Fail(resp,"user deleted");
+                        }
+                    }
+                }
             }
             else if (req.HttpMethod == "POST" && req.Url?.AbsolutePath == "/addToCircle")
             {
@@ -157,16 +242,7 @@ class HttpServer
                                 }
                                 if (!circleExist)
                                 {
-                                    Circle circle = new Circle(userId,circleName);
-                                    circle.users.Add(friendId);
-                                    if (circleDatabase.AddSingleDatabaseEntry(circle.ToBson()))
-                                    {
-                                        Response.Success(resp,"created circle","");
-                                    }
-                                    else
-                                    {
-                                        Response.Fail(resp,"an error occured, please try again later");
-                                    }
+                                    Response.Fail(resp,"Circle has not been created");
                                 }
                             }
                             else
