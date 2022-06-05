@@ -30,7 +30,17 @@ class HttpServer
             {
                 StreamReader reader = new StreamReader(req.InputStream);
                 string bodyString = await reader.ReadToEndAsync();
-                dynamic body = JsonConvert.DeserializeObject(bodyString)!;
+                dynamic body;
+                try
+                {
+                    body = JsonConvert.DeserializeObject(bodyString)!;
+                }
+                catch
+                {
+                    Response.Fail(resp, "bad request");
+                    resp.Close();
+                    continue;
+                }
 
                 string token;
                 try
@@ -84,16 +94,22 @@ class HttpServer
                     Response.Fail(resp,"invalid body");
                 }
             }
-            else if (req.HttpMethod == "GET" && req.Url?.AbsolutePath == "/health")
-            {
-                Response.Success(resp,"service up","");
-            }
-            
+
             else if (req.HttpMethod == "POST" && req.Url?.AbsolutePath == "/CreateCircle")
             {
                 StreamReader reader = new StreamReader(req.InputStream);
                 string bodyString = await reader.ReadToEndAsync();
-                dynamic body = JsonConvert.DeserializeObject(bodyString)!;
+                dynamic body;
+                try
+                {
+                    body = JsonConvert.DeserializeObject(bodyString)!;
+                }
+                catch
+                {
+                    Response.Fail(resp, "bad request");
+                    resp.Close();
+                    continue;
+                }
 
                 string token;
                 string friend_id;
@@ -177,7 +193,17 @@ class HttpServer
             {
                 StreamReader reader = new StreamReader(req.InputStream);
                 string bodyString = await reader.ReadToEndAsync();
-                dynamic body = JsonConvert.DeserializeObject(bodyString)!;
+                dynamic body;
+                try
+                {
+                    body = JsonConvert.DeserializeObject(bodyString)!;
+                }
+                catch
+                {
+                    Response.Fail(resp, "bad request");
+                    resp.Close();
+                    continue;
+                }
 
                 string token;
                 string friend_id;
@@ -261,7 +287,17 @@ class HttpServer
             {
                 StreamReader reader = new StreamReader(req.InputStream);
                 string bodyString = await reader.ReadToEndAsync();
-                dynamic body = JsonConvert.DeserializeObject(bodyString)!;
+                dynamic body;
+                try
+                {
+                    body = JsonConvert.DeserializeObject(bodyString)!;
+                }
+                catch
+                {
+                    Response.Fail(resp, "bad request");
+                    resp.Close();
+                    continue;
+                }
 
                 string token;
                 string friend_id;
@@ -335,6 +371,10 @@ class HttpServer
                         Response.Fail(resp,"circle doesn't exist");
                     }
                 }
+            }
+            else if (req.HttpMethod == "GET" && req.Url?.AbsolutePath == "/health")
+            {
+                Response.Success(resp,"service up","");
             }
             else
             {
