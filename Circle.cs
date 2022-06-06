@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using MongoDB.Bson;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace circles;
 
@@ -32,10 +33,13 @@ public class Circle
     
     public BsonDocument ToBson()
     {
-        return new BsonDocument(
-            new BsonElement("owner",owner),
-            new BsonElement("name",name),
-            new BsonElement("users",new BsonArray(users)));
+        return new BsonDocument((IEnumerable<BsonElement>)
+            new BsonElement[] 
+            { 
+            new ("owner",owner),
+            new ("name",name),
+            new ("users",new BsonArray(users))
+            });
     }
     
     public static string CircleToJson (List<BsonDocument> listCircle)
@@ -44,9 +48,15 @@ public class Circle
         int l = listCircle.Count;
         for (int i = 0; i < l; i++)
         {
-            Circle circle = new Circle(listCircle[i]);
-            string circleJson = JsonConvert.SerializeObject(circle);
-            circleListJson += circleJson;
+            BsonDocument circleBson = listCircle[i];
+            Circle circle = new Circle(circleBson);
+            
+            JObject circleJson = JObject.FromObject(circle);
+            circleJson.Property("owner").AddBeforeSelf(
+                new JProperty("id", circleBson.GetElement("_id").Value.AsObjectId.ToString()));
+            circleListJson += circleJson.ToString();
+            
+            
             if (i < l - 1)
             {
                 circleListJson += ", ";
