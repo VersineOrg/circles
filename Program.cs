@@ -26,7 +26,7 @@ class HttpServer
             Console.WriteLine(req.UserHostName);
             Console.WriteLine(req.UserAgent);
             
-            if (req.HttpMethod == "GET" && req.Url?.AbsolutePath == "/userCircles")
+            if (req.HttpMethod == "POST" && req.Url?.AbsolutePath == "/userCircles")
             {
                 StreamReader reader = new StreamReader(req.InputStream);
                 string bodyString = await reader.ReadToEndAsync();
