@@ -54,7 +54,7 @@ public class Circle
             JObject circleJson = JObject.FromObject(circle);
             circleJson.Property("owner").AddBeforeSelf(
                 new JProperty("id", circleBson.GetElement("_id").Value.AsObjectId.ToString()));
-            circleListJson += circleJson.ToString();
+            circleListJson += circleJson.ToString(Formatting.None);
             
             
             if (i < l - 1)
