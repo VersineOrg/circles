@@ -359,25 +359,27 @@ class HttpServer
                 string token;
                 string friend_id;
                 string circleName;
+                BsonObjectId friendId;
                 try
                 {
                     token = ((string) body.token).Trim();
                     friend_id = ((string) body.friendId).Trim();
                     circleName = ((string) body.circleName).Trim();
+                    friendId = new BsonObjectId(new ObjectId(friend_id));
                 }
                 catch
                 {
                     token = "";
                     friend_id = "";
                     circleName = "";
+                    friendId = new BsonObjectId(new ObjectId(""));
                 }
 
-                if (!(String.IsNullOrEmpty(token) || String.IsNullOrEmpty(friend_id)))
+                if (!(String.IsNullOrEmpty(token) || String.IsNullOrEmpty(friend_id) || String.IsNullOrEmpty(circleName)))
                 {
                     string id = jwt.GetIdFromToken(token);
                     
                     BsonObjectId userId = new BsonObjectId(new ObjectId(id));
-                    BsonObjectId friendId = new BsonObjectId(new ObjectId(friend_id));
 
                     if (circleDatabase.GetMultipleDatabaseEntries("owner", userId, out List<BsonDocument> bsonCircles))
                     {
@@ -417,16 +419,20 @@ class HttpServer
                                 }
                             }
                         }
-
+                        
                         if (!userIsInCircle)
                         {
-                            
+                            Response.Fail(resp,"the specified user isn't in the specified circle");
                         }
                     }
                     else
                     {
                         Response.Fail(resp,"circle doesn't exist");
                     }
+                }
+                else
+                {
+                    Response.Fail(resp,"invalid body");
                 }
             }
             else if (req.HttpMethod == "GET" && req.Url?.AbsolutePath == "/health")
