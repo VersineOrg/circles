@@ -93,7 +93,7 @@ class HttpServer
                 }
             }
 
-            else if (req.HttpMethod == "POST" && req.Url?.AbsolutePath == "/CreateCircle")
+            else if (req.HttpMethod == "POST" && req.Url?.AbsolutePath == "/createCircle")
             {
                 StreamReader reader = new StreamReader(req.InputStream);
                 string bodyString = await reader.ReadToEndAsync();
@@ -163,6 +163,82 @@ class HttpServer
                                     Response.Fail(resp,"circle already exists");
                                 }
                             }
+                        else
+                        {
+                            Response.Fail(resp,"user deleted");
+                        }
+                    }
+                }
+            }
+            else if (req.HttpMethod == "POST" && req.Url?.AbsolutePath == "/deleteCircle")
+            {
+                StreamReader reader = new StreamReader(req.InputStream);
+                string bodyString = await reader.ReadToEndAsync();
+                dynamic body;
+                try
+                {
+                    body = JsonConvert.DeserializeObject(bodyString)!;
+                }
+                catch
+                {
+                    Response.Fail(resp, "bad request");
+                    resp.Close();
+                    continue;
+                }
+
+                string token;
+                string circleName;
+                try
+                {
+                    token = ((string) body.token).Trim();
+                    circleName = ((string) body.circleName).Trim();
+                }
+                catch
+                {
+                    token = "";
+                    circleName = "";
+                }
+
+                if (!String.IsNullOrEmpty(token))
+                {
+                    string id = jwt.GetIdFromToken(token);
+                    if (id=="")
+                    {
+                        Response.Fail(resp, "invalid token");
+                    }
+                    else
+                    {
+                        BsonObjectId userId = new BsonObjectId(new ObjectId(id));
+                        if (userDatabase.GetSingleDatabaseEntry("_id", userId,
+                                out BsonDocument userBsonDocument))
+                        {
+                            User user = new User(userBsonDocument);
+                            bool circleExist = false;
+                                if (circleDatabase.GetMultipleDatabaseEntries("owner", userId,
+                                        EasyMango.EasyMango.SortingOrder.Descending, "name",
+                                        out List<BsonDocument> bsonCircles))
+                                {
+                                    foreach (BsonDocument bsonCircle in bsonCircles)
+                                    {
+                                        Circle circle = new Circle(bsonCircle);
+                                        if (circle.name == circleName)
+                                        {
+                                            circleExist = true;
+                                        }
+                                    }
+                                }
+                                if (circleExist)
+                                {
+                                    if (circleDatabase.RemoveSingleDatabaseEntry("name", circleName))
+                                    {
+                                        Response.Success(resp, "removed circle successfully", "");   
+                                    }
+                                }
+                                else
+                                {
+                                    Response.Fail(resp,"circle does not exists");
+                                }
+                        }
                         else
                         {
                             Response.Fail(resp,"user deleted");
